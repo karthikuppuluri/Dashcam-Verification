@@ -1,0 +1,33 @@
+dashcam_prnu_detection/
+│
+├── data/
+│   ├── raw_videos/
+│   └── frames/
+│
+├── src/
+│   ├── __init__.py
+│   ├── video_processing/
+│   │    ├── __init__.py
+│   │    ├── loader.py           # Video loading, frame extraction
+│   │    └── aligner.py          # Frame alignment tools (optical flow, feature matching)
+│   │
+│   ├── prnu_processing/
+│   │    ├── __init__.py
+│   │    ├── residual_extractor.py  # Residual extraction & denoising
+│   │    ├── fingerprint.py          # Fingerprint estimation
+│   │    └── correlator.py           # Correlation calculators (whole-frame and patch-wise)
+│   │
+│   ├── utils/
+│   │    ├── __init__.py
+│   │    ├── visualization.py       # Plotting & heatmaps
+│   │    └── logging.py             # Logging utilities
+│   │
+│   ├── config.py                   # Configuration (patch size, thresholds, denoise params)
+│   └── main.py                    # Orchestrates the pipeline, CLI interface
+│
+├── notebooks/
+│   └── experiments.ipynb
+│
+├── requirements.txt
+├── README.md
+└── .gitignore

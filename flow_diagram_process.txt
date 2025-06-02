@@ -1,0 +1,70 @@
++---------------------------+
+|    Input Dashcam Video    |
++------------+--------------+
+             |
+             v
++--------------------------------+
+|   Preprocessing & Data Ingestion |
+|  - Video format validation       |
+|  - Frame extraction              |
+|  - Metadata extraction (timestamps, GPS, etc.)  |
++------------+-------------------+
+             |
+             v
++-------------------------------+
+|   Frame Alignment & Stabilization  |
+|  - Correct for camera shake         |
+|  - Register frames to a reference   |
++------------+-------------------+
+             |
+             v
++-----------------------------+
+|   Noise Residual Extraction |
+|  - Advanced denoising (BM3D/wavelets) |
+|  - Extract PRNU component only          |
++------------+----------------+
+             |
+             v
++----------------------------+
+| Fingerprint Estimation & Update |
+| - Build baseline sensor fingerprint |
+| - Periodic updates if video is long   |
++------------+---------------+
+             |
+             v
++----------------------------------------+
+| Temporal & Spatial Consistency Checks  |
+| - Global correlation over time          |
+| - Patch-wise correlation for localization |
+| - Statistical analysis for anomaly scoring |
++------------+---------------------------+
+             |
+             v
++----------------------------------+
+|   Multi-Feature Fusion & ML Model |
+| - Combine PRNU correlations + noise anomaly features + metadata consistency |
+| - Supervised model (e.g., XGBoost, LightGBM, or a small NN) for tampering detection |
++------------+---------------------+
+             |
+             v
++-------------------------------+
+| Post-processing & Decision Logic |
+| - Temporal smoothing/filtering    |
+| - Thresholding & confidence scoring |
+| - Flag tampered segments & frames  |
++------------+-------------------+
+             |
+             v
++--------------------------+
+| Visualization & Reporting |
+| - Time-series tampering likelihood plots |
+| - Heatmaps on frames for localized tampering |
+| - Exportable tampering reports for auditors |
++------------+-------------+
+             |
+             v
++--------------------------+
+|     Integration Layer     |
+| - API endpoint or dashboard interface |
+| - Batch processing & alerting          |
++--------------------------+

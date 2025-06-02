@@ -1,0 +1,9 @@
+[1] Frame Extraction
+   ↓
+[2] PRNU Residual Extraction
+   ↓
+[3] Fingerprint Reference Creation
+   ↓
+[4] PRNU Consistency Scoring
+   ↓
+[5] Tamper Detection & Visualization
