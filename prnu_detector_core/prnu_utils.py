@@ -1,17 +1,102 @@
 import numpy as np
 import cv2
-from bm3d import bm3d_rgb
+from bm3d import bm3d_rgb, bm3d
 
-def extract_noise_residual(image: np.ndarray, sigma=5) -> np.ndarray:
+def coefficient_of_variation(block):
     """
-    Extract the noise residual from an RGB image using BM3D denoising.
-    :param image: Input image as a NumPy array (H x W x 3).
+    Calculate coefficient of variation for a block.
+    :param block: Input image block as numpy array
+    :return: Coefficient of variation (CV)
+    """
+    mean = np.mean(block)
+    std = np.std(block)
+    return std / mean if mean != 0 else 0
+
+def get_block_size(cv):
+    """
+    Determine block size based on coefficient of variation.
+    :param cv: Coefficient of variation
+    :return: Appropriate block size
+    """
+    if cv < 0.05:
+        return 8
+    elif cv < 0.1:
+        return 10
+    else:
+        return 12
+
+def process_block(block, sigma):
+    """
+    Process a single block with appropriate BM3D parameters.
+    :param block: Input image block
+    :param sigma: Noise standard deviation
+    :return: Denoised block
+    """
+    cv = coefficient_of_variation(block)
+    
+    # Adjust sigma based on CV - use smaller sigma for flat regions
+    if cv < 0.05:  # Flat region
+        adjusted_sigma = sigma * 0.7
+    elif cv < 0.1:  # Moderate texture
+        adjusted_sigma = sigma * 0.85
+    else:  # Complex texture
+        adjusted_sigma = sigma
+    
+    # Convert block to float32 and normalize
+    block_norm = block.astype(np.float32) / 255.0
+    
+    # Apply BM3D with adjusted parameters
+    if len(block.shape) == 3:  # RGB block
+        # For RGB, process each channel separately
+        denoised = np.zeros_like(block_norm)
+        for i in range(3):  # Process each color channel
+            denoised[:,:,i] = bm3d(block_norm[:,:,i], sigma_psd=adjusted_sigma/255.0)
+    else:  # Grayscale block
+        denoised = bm3d(block_norm, sigma_psd=adjusted_sigma/255.0)
+    
+    return denoised
+
+def extract_noise_residual(image: np.ndarray, sigma=5, block_size=64) -> np.ndarray:
+    """
+    Extract the noise residual from an image using adaptive block-size BM3D denoising.
+    :param image: Input image as a NumPy array (H x W x 3 for RGB or H x W for grayscale).
     :param sigma: Estimated noise standard deviation.
+    :param block_size: Size of blocks to process independently.
     :return: Noise residual (same shape as input image).
     """
-    image = image.astype(np.float32) / 255.0  # Normalize to [0, 1]
-    denoised = bm3d_rgb(image, sigma_psd=sigma / 255.0)
+    # Convert to float32 and normalize to [0, 1]
+    image = image.astype(np.float32) / 255.0
+    
+    # Get image dimensions
+    if len(image.shape) == 3:
+        h, w, c = image.shape
+    else:
+        h, w = image.shape
+        c = 1
+        image = image.reshape(h, w, 1)
+    
+    # Initialize output array
+    denoised = np.zeros_like(image)
+    
+    # Process image in blocks
+    for i in range(0, h, block_size):
+        for j in range(0, w, block_size):
+            # Get current block
+            block = image[i:min(i+block_size, h), j:min(j+block_size, w)]
+            
+            # Process block
+            denoised_block = process_block(block, sigma)
+            
+            # Store result
+            denoised[i:min(i+block_size, h), j:min(j+block_size, w)] = denoised_block
+    
+    # Calculate residual
     residual = image - denoised
+    
+    # Reshape back if input was grayscale
+    if c == 1:
+        residual = residual.reshape(h, w)
+    
     return residual
 
 def to_grayscale(image: np.ndarray) -> np.ndarray:
