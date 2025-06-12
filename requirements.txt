@@ -1,0 +1,8 @@
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.5.0
+bm3d>=3.0.8
+
+# Optional but recommended for better performance
+scikit-image>=0.19.0  # For additional image processing utilities
+scipy>=1.7.0  # Required by bm3d and for various computations 
