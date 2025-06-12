@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 from bm3d import bm3d_rgb, bm3d
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 def coefficient_of_variation(block):
     """
@@ -8,57 +10,59 @@ def coefficient_of_variation(block):
     :param block: Input image block as numpy array
     :return: Coefficient of variation (CV)
     """
-    mean = np.mean(block)
-    std = np.std(block)
-    return std / mean if mean != 0 else 0
+    # Optimize CV calculation for speed
+    block_flat = block.ravel()
+    mean = np.mean(block_flat)
+    if mean == 0:
+        return 0
+    std = np.std(block_flat)
+    return std / mean
 
-def get_block_size(cv):
+def get_adjusted_sigma(cv, base_sigma):
     """
-    Determine block size based on coefficient of variation.
+    Get adjusted sigma based on coefficient of variation.
     :param cv: Coefficient of variation
-    :return: Appropriate block size
+    :param base_sigma: Base sigma value
+    :return: Adjusted sigma value
     """
-    if cv < 0.05:
-        return 8
-    elif cv < 0.1:
-        return 10
-    else:
-        return 12
+    if cv < 0.05:  # Flat region
+        return base_sigma * 0.7
+    elif cv < 0.1:  # Moderate texture
+        return base_sigma * 0.85
+    return base_sigma  # Complex texture
 
-def process_block(block, sigma):
+def process_block(block_data):
     """
     Process a single block with appropriate BM3D parameters.
-    :param block: Input image block
-    :param sigma: Noise standard deviation
-    :return: Denoised block
+    :param block_data: Tuple of (block, sigma)
+    :return: Tuple of (denoised_block, block_index)
     """
-    cv = coefficient_of_variation(block)
+    block, sigma, block_index = block_data
     
-    # Adjust sigma based on CV - use smaller sigma for flat regions
-    if cv < 0.05:  # Flat region
-        adjusted_sigma = sigma * 0.7
-    elif cv < 0.1:  # Moderate texture
-        adjusted_sigma = sigma * 0.85
-    else:  # Complex texture
-        adjusted_sigma = sigma
+    # Skip processing if block is too small
+    if block.shape[0] < 8 or block.shape[1] < 8:
+        return block, block_index
+        
+    cv = coefficient_of_variation(block)
+    adjusted_sigma = get_adjusted_sigma(cv, sigma)
     
     # Convert block to float32 and normalize
     block_norm = block.astype(np.float32) / 255.0
     
-    # Apply BM3D with adjusted parameters
-    if len(block.shape) == 3:  # RGB block
-        # For RGB, process each channel separately
+    # Process based on block type
+    if len(block.shape) == 3:
         denoised = np.zeros_like(block_norm)
-        for i in range(3):  # Process each color channel
+        # Process all channels at once for better efficiency
+        for i in range(3):
             denoised[:,:,i] = bm3d(block_norm[:,:,i], sigma_psd=adjusted_sigma/255.0)
-    else:  # Grayscale block
+    else:
         denoised = bm3d(block_norm, sigma_psd=adjusted_sigma/255.0)
     
-    return denoised
+    return denoised, block_index
 
-def extract_noise_residual(image: np.ndarray, sigma=5, block_size=64) -> np.ndarray:
+def extract_noise_residual(image: np.ndarray, sigma=5, block_size=128) -> np.ndarray:
     """
-    Extract the noise residual from an image using adaptive block-size BM3D denoising.
+    Extract the noise residual from an image using parallel adaptive BM3D denoising.
     :param image: Input image as a NumPy array (H x W x 3 for RGB or H x W for grayscale).
     :param sigma: Estimated noise standard deviation.
     :param block_size: Size of blocks to process independently.
@@ -78,17 +82,32 @@ def extract_noise_residual(image: np.ndarray, sigma=5, block_size=64) -> np.ndar
     # Initialize output array
     denoised = np.zeros_like(image)
     
-    # Process image in blocks
+    # Prepare blocks for parallel processing
+    blocks = []
+    positions = []
+    
+    # Split image into blocks
+    block_index = 0
     for i in range(0, h, block_size):
         for j in range(0, w, block_size):
-            # Get current block
-            block = image[i:min(i+block_size, h), j:min(j+block_size, w)]
+            # Get block boundaries
+            i_end = min(i + block_size, h)
+            j_end = min(j + block_size, w)
             
-            # Process block
-            denoised_block = process_block(block, sigma)
-            
-            # Store result
-            denoised[i:min(i+block_size, h), j:min(j+block_size, w)] = denoised_block
+            # Extract block
+            block = image[i:i_end, j:j_end].copy()  # Make a copy to ensure it's contiguous
+            blocks.append((block, sigma, block_index))
+            positions.append((i, i_end, j, j_end))
+            block_index += 1
+    
+    # Process blocks in parallel using multiprocessing
+    n_workers = min(cpu_count(), 8)  # Use at most 8 cores
+    with Pool(processes=n_workers) as pool:
+        results = pool.map(process_block, blocks)
+    
+    # Reconstruct the image
+    for (denoised_block, block_idx), (i_start, i_end, j_start, j_end) in zip(results, positions):
+        denoised[i_start:i_end, j_start:j_end] = denoised_block
     
     # Calculate residual
     residual = image - denoised
